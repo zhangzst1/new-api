@@ -48,17 +48,16 @@ import {
   getOptionLoadErrorMessage,
   shouldClearModelForGroup,
 } from '../lib'
-import type { GroupOption, ModelOption, PlaygroundConfig } from '../types'
+import type { GroupOption, ModelOption } from '../types'
 
 type UsePlaygroundOptionsParams = {
   currentGroup: string
   currentModel: string
   setGroups: (groups: GroupOption[]) => void
   setModels: (models: ModelOption[]) => void
-  updateConfig: <K extends keyof PlaygroundConfig>(
-    key: K,
-    value: PlaygroundConfig[K]
-  ) => void
+  updateConfig: (key: 'model' | 'group', value: string) => void
+  /** Lists only the models serving this endpoint type, e.g. image-generation. */
+  endpointType?: string
 }
 
 export function usePlaygroundOptions({
@@ -67,6 +66,7 @@ export function usePlaygroundOptions({
   setGroups,
   setModels,
   updateConfig,
+  endpointType,
 }: UsePlaygroundOptionsParams) {
   const { t } = useTranslation()
 
@@ -76,9 +76,11 @@ export function usePlaygroundOptions({
     isError: isModelsError,
     isLoading: isLoadingModels,
   } = useQuery({
-    queryKey: ['playground-models', currentGroup],
+    queryKey: endpointType
+      ? ['playground-models', currentGroup, endpointType]
+      : ['playground-models', currentGroup],
     queryFn: async () =>
-      requireServerSuccess(await getUserModels(currentGroup)),
+      requireServerSuccess(await getUserModels(currentGroup, endpointType)),
     enabled: currentGroup !== '',
   })
 

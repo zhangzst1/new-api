@@ -228,6 +228,33 @@ func TestAdaptorReturnsErrorWhenNoRouteMatchesPath(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not support request path")
 }
 
+// Console playground requests (/pg/...) select the route configured for the
+// /v1 path they proxy.
+func TestAdaptorMatchesPlaygroundPathToV1Route(t *testing.T) {
+	adaptor := &Adaptor{}
+	info := advancedCustomRelayInfo(&dto.AdvancedCustomConfig{
+		Routes: []dto.AdvancedCustomRoute{
+			{
+				IncomingPath: "/v1/images/generations",
+				UpstreamPath: "/v1/images/generations",
+				Converter:    relayconvert.ConverterNone,
+			},
+		},
+	})
+	info.RelayFormat = types.RelayFormatOpenAIImage
+	info.RelayMode = relayconstant.RelayModeImagesGenerations
+	info.RequestURLPath = "/v1/images/generations"
+
+	_, err := adaptor.ConvertImageRequest(advancedCustomGinContext("/pg/images/generations"), info, dto.ImageRequest{Model: "gpt-test", Prompt: "a cat"})
+	require.NoError(t, err)
+
+	requestURL, err := adaptor.GetRequestURL(info)
+	require.NoError(t, err)
+	parsedURL, err := url.Parse(requestURL)
+	require.NoError(t, err)
+	assert.Equal(t, "/v1/images/generations", parsedURL.Path)
+}
+
 func TestAdaptorReplacesModelPlaceholderInRouteURL(t *testing.T) {
 	adaptor := &Adaptor{}
 	info := advancedCustomRelayInfo(&dto.AdvancedCustomConfig{

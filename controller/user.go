@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -561,6 +562,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 	defaultConfig["chat"] = map[string]any{
 		"enabled":    true,
 		"playground": true,
+		"image":      true,
 		"chat":       true,
 	}
 
@@ -642,10 +644,20 @@ func GetUserModels(c *gin.Context) {
 			groupsToQuery = []string{group}
 		}
 	}
+	models := service.GetGroupsEnabledModels(groupsToQuery)
+	// endpoint_type keeps only the models serving that endpoint, e.g.
+	// image-generation for the image playground. GetPricing refreshes the
+	// endpoint index that GetModelSupportEndpointTypes reads.
+	if endpointType := constant.EndpointType(c.Query("endpoint_type")); endpointType != "" {
+		model.GetPricing()
+		models = slices.DeleteFunc(models, func(name string) bool {
+			return !slices.Contains(model.GetModelSupportEndpointTypes(name), endpointType)
+		})
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    service.GetGroupsEnabledModels(groupsToQuery),
+		"data":    models,
 	})
 }
 

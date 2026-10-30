@@ -381,7 +381,8 @@ func (a *Adaptor) resolve(c *gin.Context, info *relaycommon.RelayInfo) error {
 
 func incomingRequestPath(c *gin.Context, info *relaycommon.RelayInfo) string {
 	if c != nil && c.Request != nil && c.Request.URL != nil {
-		return c.Request.URL.Path
+		// Console playground requests match the routes of the /v1 path they proxy.
+		return relayconstant.NormalizePlaygroundPath(c.Request.URL.Path)
 	}
 	if info == nil {
 		return ""

@@ -54,9 +54,20 @@ const (
 	RelayModeToolsFetch
 )
 
+// NormalizePlaygroundPath maps a console playground path (/pg/<rest>) to the
+// relay path it proxies (/v1/<rest>), so routing and request parsing treat
+// both alike. Other paths are returned unchanged.
+func NormalizePlaygroundPath(path string) string {
+	if rest, ok := strings.CutPrefix(path, "/pg/"); ok {
+		return "/v1/" + rest
+	}
+	return path
+}
+
 func Path2RelayMode(path string) int {
+	path = NormalizePlaygroundPath(path)
 	relayMode := RelayModeUnknown
-	if strings.HasPrefix(path, "/v1/chat/completions") || strings.HasPrefix(path, "/pg/chat/completions") {
+	if strings.HasPrefix(path, "/v1/chat/completions") {
 		relayMode = RelayModeChatCompletions
 	} else if strings.HasPrefix(path, "/v1/completions") {
 		relayMode = RelayModeCompletions

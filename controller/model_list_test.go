@@ -265,6 +265,52 @@ func TestGetUserModelsExpandsAutoGroupsInConfiguredOrder(t *testing.T) {
 	assert.Equal(t, "zz-default-model", models[2])
 }
 
+// endpoint_type keeps the group's models that serve the endpoint: image models
+// recognized by name and models whose metadata declares the endpoint.
+func TestGetUserModelsFiltersByEndpointType(t *testing.T) {
+	db := setupModelListControllerTestDB(t)
+	model.InvalidatePricingCache()
+	t.Cleanup(model.InvalidatePricingCache)
+
+	require.NoError(t, db.Create(&model.User{
+		Id:       1004,
+		Username: "endpoint-filter-model-user",
+		Password: "password",
+		Group:    "default",
+		Status:   common.UserStatusEnabled,
+	}).Error)
+	require.NoError(t, db.Create(&model.Channel{
+		Id:     702,
+		Type:   constant.ChannelTypeOpenAI,
+		Key:    "openai-key",
+		Status: common.ChannelStatusEnabled,
+		Name:   "openai-channel",
+		Group:  "default",
+		Models: "zz-gpt-image-1,zz-chat-model,zz-custom-painter",
+	}).Error)
+	require.NoError(t, db.Create(&[]model.Ability{
+		{Group: "default", Model: "zz-gpt-image-1", ChannelId: 702, Enabled: true},
+		{Group: "default", Model: "zz-chat-model", ChannelId: 702, Enabled: true},
+		{Group: "default", Model: "zz-custom-painter", ChannelId: 702, Enabled: true},
+	}).Error)
+	require.NoError(t, db.Create(&model.Model{
+		ModelName: "zz-custom-painter",
+		Endpoints: `{"image-generation":"/v1/images/generations"}`,
+	}).Error)
+
+	requestModels := func(query string) []string {
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		ctx.Request = httptest.NewRequest(http.MethodGet, "/api/user/models?"+query, nil)
+		ctx.Set("id", 1004)
+		GetUserModels(ctx)
+		return decodeUserModelsResponse(t, recorder)
+	}
+
+	assert.ElementsMatch(t, []string{"zz-gpt-image-1", "zz-custom-painter"}, requestModels("group=default&endpoint_type=image-generation"))
+	assert.ElementsMatch(t, []string{"zz-gpt-image-1", "zz-chat-model", "zz-custom-painter"}, requestModels("group=default"))
+}
+
 func TestListModelsIncludesTieredBillingModel(t *testing.T) {
 	withSelfUseModeDisabled(t)
 	withTieredBillingConfig(t, map[string]string{

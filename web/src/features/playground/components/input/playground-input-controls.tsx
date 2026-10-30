@@ -39,6 +39,12 @@ type PlaygroundInputControlsProps = {
   onStop?: () => void
   text: string
   tools: ReactNode
+  /** Submit button text; defaults to "Send". */
+  submitLabel?: string
+  /** Submit button icon; defaults to a send icon. */
+  submitIcon?: ReactNode
+  /** Blocks submitting for a reason other than empty text or no models. */
+  submitDisabled?: boolean
 }
 
 export function PlaygroundInputControls({
@@ -54,6 +60,9 @@ export function PlaygroundInputControls({
   onStop,
   text,
   tools,
+  submitLabel,
+  submitIcon,
+  submitDisabled = false,
 }: PlaygroundInputControlsProps) {
   const { t } = useTranslation()
   const { canSubmit, isSelectorDisabled, shouldShowStop } =
@@ -66,6 +75,7 @@ export function PlaygroundInputControls({
       models,
       text,
     })
+  const resolvedSubmitLabel = submitLabel ?? t('Send')
 
   const renderSelector = () => (
     <ModelGroupSelector
@@ -93,13 +103,13 @@ export function PlaygroundInputControls({
     ) : (
       <PromptInputButton
         className='bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground h-8 px-3 font-medium shadow-sm'
-        disabled={!canSubmit}
+        disabled={!canSubmit || submitDisabled}
         type='submit'
         variant='default'
       >
-        <SendIcon size={16} />
-        <span className='hidden sm:inline'>{t('Send')}</span>
-        <span className='sr-only sm:hidden'>{t('Send')}</span>
+        {submitIcon ?? <SendIcon size={16} />}
+        <span className='hidden sm:inline'>{resolvedSubmitLabel}</span>
+        <span className='sr-only sm:hidden'>{resolvedSubmitLabel}</span>
       </PromptInputButton>
     )
 

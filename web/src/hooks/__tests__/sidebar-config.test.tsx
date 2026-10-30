@@ -120,6 +120,60 @@ describe('security sidebar visibility', () => {
   })
 })
 
+describe('image generation sidebar entry', () => {
+  it('legacy configurations show Image Generation right after Playground, active only on its page', () => {
+    const { result } = sidebarFor(
+      { chat: { enabled: true, playground: true, chat: true } },
+      { chat: { enabled: true, playground: true } }
+    )
+    const items =
+      result.current.find((group) => group.id === 'chat')?.items ?? []
+    const playgroundIndex = items.findIndex(
+      (item) => item.title === 'Playground'
+    )
+    expect(items[playgroundIndex + 1]).toMatchObject({
+      title: 'Image Generation',
+      url: '/playground/images',
+    })
+    const selected = items.filter((item) =>
+      checkIsActive('/playground/images', item)
+    )
+    expect(selected.map((item) => item.title)).toEqual(['Image Generation'])
+  })
+
+  it('admin settings default Image Generation to visible and keep its own toggle when saved', () => {
+    const config = parseSidebarModulesAdmin(
+      '{"chat":{"enabled":true,"playground":true}}'
+    )
+    expect(config.chat.image).toBe(true)
+    config.chat.image = false
+    const saved = parseSidebarModulesAdmin(serializeSidebarModulesAdmin(config))
+    const { result } = sidebarFor(saved)
+    const titles = result.current
+      .flatMap((group) => group.items)
+      .map((item) => item.title)
+    expect(titles).not.toContain('Image Generation')
+    expect(titles).toContain('Playground')
+  })
+
+  it.each([
+    [{ chat: { enabled: true, image: false } }, undefined],
+    [{ chat: { enabled: false } }, { chat: { image: true } }],
+    [undefined, { chat: { enabled: true, image: false } }],
+    [undefined, { chat: { enabled: false } }],
+  ])(
+    'admin and personal visibility rules can hide Image Generation (%j, %j)',
+    (admin, user) => {
+      const { result } = sidebarFor(admin, user)
+      expect(
+        result.current
+          .flatMap((group) => group.items)
+          .some((item) => item.title === 'Image Generation')
+      ).toBe(false)
+    }
+  )
+})
+
 describe('audit log sidebar entry', () => {
   it('admin settings default Audit Logs to visible and preserve its independent toggle when saved', () => {
     const config = parseSidebarModulesAdmin(

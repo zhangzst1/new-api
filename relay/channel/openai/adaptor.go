@@ -543,7 +543,9 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 		// 写入所有非文件字段
 		if mf != nil {
 			for key, values := range mf.Value {
-				if key == "model" {
+				// group selects the gateway group of a playground request, the
+				// same as in JSON bodies, and is never an upstream parameter.
+				if key == "model" || key == "group" {
 					continue
 				}
 				for _, value := range values {

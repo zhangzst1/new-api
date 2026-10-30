@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -186,6 +188,82 @@ func TestGetModelRequestAssignsDeepSeekToolRoutingNames(t *testing.T) {
 		require.NoError(t, err, tc.body)
 		assert.True(t, shouldSelectChannel, tc.body)
 		assert.Equal(t, tc.want, modelRequest.Model, tc.body)
+	}
+}
+
+// Console playground requests name the model and the group in a JSON or a
+// multipart body; both are read for routing, and the group becomes the token
+// group the request is rate limited and billed under.
+func TestGetModelRequestReadsPlaygroundModelAndGroup(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	var editBody bytes.Buffer
+	writer := multipart.NewWriter(&editBody)
+	require.NoError(t, writer.WriteField("model", "gpt-image-1"))
+	require.NoError(t, writer.WriteField("group", "vip"))
+	require.NoError(t, writer.WriteField("prompt", "add a hat"))
+	part, err := writer.CreateFormFile("image", "input.png")
+	require.NoError(t, err)
+	_, err = part.Write([]byte("fake image"))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	for _, tc := range []struct{ path, contentType, body, model string }{
+		{"/pg/chat/completions", "application/json", `{"model":"gpt-4o","group":"vip","messages":[]}`, "gpt-4o"},
+		{"/pg/images/generations", "application/json", `{"model":"gpt-image-1","group":"vip","prompt":"a cat"}`, "gpt-image-1"},
+		{"/pg/images/edits", writer.FormDataContentType(), editBody.String(), "gpt-image-1"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+			c.Request.Header.Set("Content-Type", tc.contentType)
+
+			modelRequest, shouldSelectChannel, err := getModelRequest(c)
+
+			require.NoError(t, err)
+			assert.True(t, shouldSelectChannel)
+			assert.Equal(t, tc.model, modelRequest.Model)
+			assert.Equal(t, "vip", modelRequest.Group)
+			assert.Equal(t, "vip", common.GetContextKeyString(c, constant.ContextKeyTokenGroup))
+		})
+	}
+}
+
+// A playground body group the user may not use is rejected before channel
+// selection; a usable one is the group the channel is selected from.
+func TestDistributeAppliesPlaygroundBodyGroup(t *testing.T) {
+	require.NoError(t, i18n.Init())
+	originalUsableGroups := setting.UserUsableGroups2JSONString()
+	t.Cleanup(func() { require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(originalUsableGroups)) })
+	require.NoError(t, setting.UpdateUserUsableGroupsByJSONString(`{"default":"Default","pg-usable":"Usable"}`))
+	previousCacheEnabled := common.MemoryCacheEnabled
+	common.MemoryCacheEnabled = true
+	t.Cleanup(func() { common.MemoryCacheEnabled = previousCacheEnabled })
+
+	for _, tc := range []struct {
+		group   string
+		status  int
+		message string
+	}{
+		{"pg-denied", http.StatusForbidden, "No permission to access this group"},
+		{"pg-usable", http.StatusServiceUnavailable, "No available channel for model pg-image-model under group pg-usable"},
+	} {
+		t.Run(tc.group, func(t *testing.T) {
+			router := gin.New()
+			router.POST("/pg/images/generations", func(c *gin.Context) {
+				common.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
+			}, Distribute(), func(c *gin.Context) {
+				t.Error("a request without a usable channel must stop before the relay handler")
+			})
+			request := httptest.NewRequest(http.MethodPost, "/pg/images/generations", strings.NewReader(`{"model":"pg-image-model","group":"`+tc.group+`","prompt":"a cat"}`))
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set("Accept-Language", "en")
+			recorder := httptest.NewRecorder()
+
+			router.ServeHTTP(recorder, request)
+
+			assert.Equal(t, tc.status, recorder.Code)
+			assert.Contains(t, recorder.Body.String(), tc.message)
+		})
 	}
 }
 

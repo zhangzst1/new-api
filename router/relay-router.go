@@ -66,7 +66,17 @@ func SetRelayRouter(router *gin.Engine) {
 	playgroundRouter.Use(middleware.SystemPerformanceCheck())
 	playgroundRouter.Use(middleware.UserAuth(), middleware.Distribute())
 	{
-		playgroundRouter.POST("/chat/completions", controller.Playground)
+		playgroundRouter.POST("/chat/completions", func(c *gin.Context) {
+			controller.Playground(c, types.RelayFormatOpenAI)
+		})
+		// The image routes mirror /v1/images/*, including its model request
+		// rate limit, which counts under the group named in the request body.
+		playgroundRouter.POST("/images/generations", middleware.ModelRequestRateLimit(), func(c *gin.Context) {
+			controller.Playground(c, types.RelayFormatOpenAIImage)
+		})
+		playgroundRouter.POST("/images/edits", middleware.ModelRequestRateLimit(), func(c *gin.Context) {
+			controller.Playground(c, types.RelayFormatOpenAIImage)
+		})
 	}
 	relayV1Router := router.Group("/v1")
 	relayV1Router.Use(middleware.RouteTag("relay"))

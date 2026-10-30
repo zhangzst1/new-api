@@ -42,11 +42,15 @@ export async function sendChatCompletion(
 }
 
 /**
- * Get user available models
+ * Get user available models. With an endpoint type (for example
+ * `image-generation`), only the models serving that endpoint are returned.
  */
-export async function getUserModels(group: string): Promise<ModelOption[]> {
+export async function getUserModels(
+  group: string,
+  endpointType?: string
+): Promise<ModelOption[]> {
   const res = await api.get(API_ENDPOINTS.USER_MODELS, {
-    params: { group },
+    params: endpointType ? { group, endpoint_type: endpointType } : { group },
   })
   const { data } = res
   requireServerSuccess(data)

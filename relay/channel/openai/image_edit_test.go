@@ -19,7 +19,8 @@ import (
 // TestConvertImageEditRequestMultipart verifies that ConvertImageRequest
 // re-serializes multipart image edit requests with all fields (including
 // stream) and the file intact, both when the form was already parsed and when
-// it must be re-parsed from the reusable body.
+// it must be re-parsed from the reusable body. The gateway's playground group
+// field is not forwarded.
 func TestConvertImageEditRequestMultipart(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -27,6 +28,7 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 		var body bytes.Buffer
 		writer := multipart.NewWriter(&body)
 		require.NoError(t, writer.WriteField("model", "gpt-image-1"))
+		require.NoError(t, writer.WriteField("group", "vip"))
 		require.NoError(t, writer.WriteField("prompt", prompt))
 		require.NoError(t, writer.WriteField("stream", "true"))
 		require.NoError(t, writer.WriteField("partial_images", "3"))
@@ -65,6 +67,7 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 		require.Equal(t, prompt, replayedRequest.PostForm.Get("prompt"))
 		require.Equal(t, "true", replayedRequest.PostForm.Get("stream"))
 		require.Equal(t, "3", replayedRequest.PostForm.Get("partial_images"))
+		require.NotContains(t, replayedRequest.MultipartForm.Value, "group")
 		require.Len(t, replayedRequest.MultipartForm.File["image"], 1)
 
 		file, err := replayedRequest.MultipartForm.File["image"][0].Open()
